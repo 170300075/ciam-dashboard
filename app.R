@@ -2,12 +2,13 @@ library(bs4Dash)                # Agregar estilo de Boostrap 4
 library(mongolite)              # Añadir conectividad con MongoDB
 library(toastui)                # Añadir elementos de toastui
 library(highcharter)            # Añadir elementos visuales de highcharts
-library(shiny)
-library(DT)
-library(dplyr)
-library(shinycookie)
+library(shiny)                  # Añadir los elementos de shiny
+library(DT)                     # Añadir datatables
+library(dplyr)                  # Añadir funcionalidad de manipulación de datos
+library(shinycookie)            # Añadir cookies en shiny
 
 
+# Importar componentes adicionales
 source("matriculaInput.R")
 source("contraseñaInput.R")
 
@@ -73,6 +74,7 @@ login <- div(
     tags$script(src = "showPassword.js"),
     tags$link(rel = "stylesheet", type="text/css", href="matricula-style.css"),
     tags$script(src = "styling.js"),
+
     # Ya se importan con bslib pero el checkbox no funciona sin estos
     tags$script(src = "bootstrap.bundle.min.js"),
     tags$link(rel = "stylesheet", type="text/css", href="bootstrap.min.css")
@@ -111,7 +113,7 @@ login <- div(
                   # ID USER
                   tags$div(
                     class = "input-group has-validation px-3 mb-4",
-                    matriculaInput(inputId = "id_user", label = "Correo electrónico")
+                    matriculaInput(inputId = "email", label = "Correo electrónico")
                   ),
 
                   # PASSWORD
@@ -142,6 +144,97 @@ login <- div(
                     label = "Acceder",
                     class = "btn btn-primary mx-3 mb-3"
                   ),
+
+                  # REGISTER LINK
+                  a(href = "#", "Crear una cuenta", 
+                    class = "mx-3 mb-3 text-decoration-none text-end", 
+                    style = "display: block",
+                    `onclick` = "document.cookie='access_token=register'"
+                  )
+                )
+              )
+            )
+          )
+        )
+      )   
+    )
+  )
+)
+
+register <- div(
+  id = "register", 
+  tags$head(
+    tags$link(rel="stylesheet", href = "hiddenScrollbar.css"),
+    tags$script(src = "showPassword.js"),
+    tags$link(rel = "stylesheet", type="text/css", href="matricula-style.css"),
+    tags$script(src = "styling.js"),
+
+    # Ya se importan con bslib pero el checkbox no funciona sin estos
+    tags$script(src = "bootstrap.bundle.min.js"),
+    tags$link(rel = "stylesheet", type="text/css", href="bootstrap.min.css")
+  ),
+
+  div(
+    class = "bg-light",
+    div(
+      class = "container",
+      div(
+        class = "row vh-100 justify-content-center align-items-center",
+        div(
+          class = "col",
+          div(
+            class = "card mb-3 border-0 shadow-lg mx-auto",
+            style = "max-width: 600px;",
+            div(
+              class = "row",
+              div(
+                class = "col-md-4",
+                style = "background-image: url('./full_logo.png'); background-size: cover; background-repeat: no-repeat; background-position: center; background-attachment: scroll;"
+              ),
+              
+              div(
+                class = "col-md-8",
+                div(
+                  class = "card-body",
+                  h5(
+                    class = "card-title mt-3 mb-4 text-center lead fs-2", # nolint
+                    span(
+                      class="fst-italic fw-bold",
+                      "CIAM Surveys"
+                    )
+                  ),
+                  
+                  # ID USER
+                  tags$div(
+                    class = "input-group has-validation px-3 mb-4",
+                    matriculaInput(inputId = "email", label = "Correo electrónico")
+                  ),
+
+                  # PASSWORD
+                  tags$div(
+                    class = "input-group has-validation px-3 mb-4",
+                    contraseñaInput(inputId = "password", label = "Escribe tu nueva contraseña")
+                  ),
+                    
+                  # PASSWORD AGAIN
+                  tags$div(
+                    class = "input-group has-validation px-3 mb-4",
+                    contraseñaInput(inputId = "password_match", label = "Escribe tu contraseña de nuevo")
+                  ),
+                  
+                  # SUBMIT
+                  actionButton(
+                    inputId = "login",
+                    label = "Acceder",
+                    class = "btn btn-primary mx-3 mb-3"
+                  ),
+
+                  # LOGIN LINK
+                  a(href = "#", "Ya tengo una cuenta", 
+                    class = "mx-3 mb-3 text-decoration-none text-end", 
+                    style = "display: block",
+                    `onclick` = "document.cookie='access_token=login'"
+                  )
                 )
               )
             )
@@ -159,6 +252,11 @@ dashboard <- dashboardPage(
 )
 
 ui <- div(
+  tags$head(
+    # Estilizar botones para CIAM
+    tags$link(rel="stylesheet", href = "custom_styles.css"),
+  ),
+
   id = "container",
   initShinyCookie("token")
 )
@@ -166,42 +264,37 @@ ui <- div(
 # Lógica del servidor
 server <- function(input, output, session) {
 
-  # Si el token cambia de valor
+  # Lógica de la app
+  observe({
+
+    if(!is.null(input$token$access_token)){
+      # Si el token está para registro
+      if(input$token$access_token == "register") {
+        # Insertar el register en la página
+        insertUI(selector = "#container", where = "afterBegin", register)
+      }
+
+      else if(input$token$access_token == "login") {
+        # Insertar el login en la página
+        insertUI(selector = "#container", where = "afterBegin", login)
+      }
+
+      else {
+        # El token se valida para corroborar su validez
+        # Insertar el dashboard en la página
+        insertUI(selector = "#container", where = "afterBegin", dashboard)
+      }
+    }
+
+    # Si el token es nulo
+    else{
+      updateCookie(session, "access_token" = "login")
+      session$reload()
+    }
+  })
+
   observeEvent(input$login, {
     updateCookie(session, "access_token" = "true")
-    session$reload()
-  })
-
-  tokenization <- eventReactive(input$token, {
-    if(is.null(input$token$access_token)) {
-      # session$reload()
-    }
-
-    else {
-      updateCookie(session, "access_token" = "true")
-    }
-  })
-
-
-  observe({
-    tokenization()
-
-    # Si token existe
-    if(!is.null(input$token$access_token)) {
-      # Eliminar el login de la página
-      removeUI(selector = "#login")
-
-      # Insertar el dashboard en la página
-      insertUI(selector = "#container", where = "afterBegin", dashboard)
-    } 
-    
-    # Si no existe token
-    else {
-      # Remover el wrapper de la página
-      removeUI(selector = ".wrapper")
-      # Insertar el login en la página
-      insertUI(selector = "#container", where = "afterBegin", login)
-    }
   })
 
 
@@ -244,6 +337,7 @@ server <- function(input, output, session) {
     )
 
     datos$resultados_encuesta <- resultados_encuesta
+
   })
 
   # Nos conectamos a la base de datos
