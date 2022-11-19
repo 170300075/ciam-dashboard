@@ -11,6 +11,9 @@ library(shinycookie)            # Añadir cookies en shiny
 # Importar componentes adicionales
 source("matriculaInput.R")
 source("contraseñaInput.R")
+# Importar funciones para usar API
+source("./config/api.R")
+
 
 # Barra de navegación
 header <- dashboardHeader(
@@ -169,6 +172,9 @@ register <- div(
     tags$link(rel = "stylesheet", type="text/css", href="matricula-style.css"),
     tags$script(src = "styling.js"),
 
+    # Estilizar botones para CIAM
+    tags$link(rel="stylesheet", href = "custom_styles.css"),
+
     # Ya se importan con bslib pero el checkbox no funciona sin estos
     tags$script(src = "bootstrap.bundle.min.js"),
     tags$link(rel = "stylesheet", type="text/css", href="bootstrap.min.css")
@@ -224,8 +230,8 @@ register <- div(
                   
                   # SUBMIT
                   actionButton(
-                    inputId = "login",
-                    label = "Acceder",
+                    inputId = "register",
+                    label = "Registrarse",
                     class = "btn btn-primary mx-3 mb-3"
                   ),
 
@@ -252,11 +258,6 @@ dashboard <- dashboardPage(
 )
 
 ui <- div(
-  tags$head(
-    # Estilizar botones para CIAM
-    tags$link(rel="stylesheet", href = "custom_styles.css"),
-  ),
-
   id = "container",
   initShinyCookie("token")
 )
@@ -267,14 +268,23 @@ server <- function(input, output, session) {
   # Lógica de la app
   observe({
 
+    # Si el token de acceso existe
     if(!is.null(input$token$access_token)){
       # Si el token está para registro
       if(input$token$access_token == "register") {
+        # Remover el UI del login
+        removeUI(selector = "#login")
+
+        div(id = "register_alert", style = "position: absolute; bottom: 0; right: 0;")
+        
         # Insertar el register en la página
         insertUI(selector = "#container", where = "afterBegin", register)
       }
 
       else if(input$token$access_token == "login") {
+        # Remover el UI del register
+        removeUI(selector = "#register")
+
         # Insertar el login en la página
         insertUI(selector = "#container", where = "afterBegin", login)
       }
@@ -293,56 +303,32 @@ server <- function(input, output, session) {
     }
   })
 
+  # Si se presiona botón de login
   observeEvent(input$login, {
     updateCookie(session, "access_token" = "true")
+    session$reload()
   })
 
+  # Si se presiona botón de registro
+  observeEvent(input$register, {
+    if(input$password != input$password_match) {
+      createAlert(
+        id = "register_alert",
+        options = list(
+          title = "Error",
+          closable = TRUE,
+          width = 6,
+          elevations = 4,
+          status = "warning",
+          content = "Las contraseñas proporcionadas no coinciden, intente de nuevo..."
+        ),
 
-  # Almacenamiento de valores reactivos
-  datos <- reactiveValues()
-  
-  observe({
-    # Procesamiento de los datos
-    resultados_encuesta <- conn$find("{}")
-    resultados_encuesta[is.na(resultados_encuesta)] <- "No aplica"
-    resultados_encuesta <- resultados_encuesta %>% rename(
-      "Nombre completo" = nombre,
-      "Correo electrónico" = correo,
-      "Edad" = edad,
-      "Sexo" = sexo,
-      "Estado civil" = estado_civil,
-      "Habla lengua indigena" = habla_lengua_indigena,
-      "Cuál lengua indigena" = cual_lengua_indigena,
-      "Ingresos mensuales del hogar" = ingresos_mensuales_hogar,
-      "Personas que viven en la misma vivienda" = viven_misma_vivienda,
-      "Cantidad personas trabajan" = cuantas_personas_trabajan,
-      "Principal ingreso económico" = principal_ingreso_economico,
-      "Sector económico del principal ingreso económico" = sector_economico,
-      "Horas laborales" = horas_laborales,
-      "Minutos en llegar al trabajo" = minutos_llegar_trabajo,
-      "Cantidad de menores (femenino)" = cantidad_menores_femenino,
-      "Cantidad de menores (masculino)" = cantidad_menores_masculino,
-      "Quién cuida a los menores" = quien_cuida_menores,
-      "Menores que asisten a la escuela" = menores_asisten_escuela,
-      "Rango de edad de menores" = rango_edad_menores,
-      "Servicio médico" = servicio_medico,
-      "Lugar de residencia" = lugar_residencia,
-      "Ultimo grado de estudios (principal ingreso)" = ultimo_grado_estudios_principal_ingreso,
-      "Último grado de estudios (encuestado)" = ultimo_grado_estudios_encuestado,
-      "Principales necesidades" = principales_necesidades,
-      "Otra principal necesidad" = cual_principal_necesidad,
-      "Conoce el CIAM" = conoce_ciam,
-      "Actividades que recomienda" = actividades_recomendadas,
-      "Hora de la encuesta" = hora_encuesta
-    )
-
-    datos$resultados_encuesta <- resultados_encuesta
-
+        session = shiny::getDefaultReactiveDomain()
+      )
+    }
+    # session$reload()
   })
 
-  # Nos conectamos a la base de datos
-  conn <- mongo("encuesta", url = "mongodb+srv://170300075:Maripau01@cluster0.ynkmfoz.mongodb.net/ciam")
-  
   output$graficas <- renderUI({
     box(
       title = "Principales gráficas",
@@ -355,9 +341,6 @@ server <- function(input, output, session) {
 
 
       bs4Table(iris)
-      # Gráfica por edades
-      #hchart(datos$resultados_encuesta, type = "columns", hcaes(x = "Sexo") %>% 
-      #hcaes(x = "Sexo", y = "Edad"))
     )
   })
 
@@ -378,7 +361,7 @@ server <- function(input, output, session) {
         pagination = 10,
         filters = TRUE,
         theme = "striped",
-        colwidths = "guess", # Tamaño de columnas adecuado
+        colwidths = "guess",
         align = "left",
         width = "100%"
       )
